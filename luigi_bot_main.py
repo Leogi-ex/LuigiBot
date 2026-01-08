@@ -26,7 +26,7 @@ import pandas as pd
 # CONFIG // INTIALIZING
 
 # Loading BOT secrets
-with open(f'Discord Bot\\LuigiBot\\config.json') as f:
+with open(f'config.json') as f:
     config = json.load(f)
 
 
@@ -35,7 +35,7 @@ bot = commands.Bot(command_prefix="!L ", intents=discord.Intents.all())
 
 channel_id = config['Channel_ID']
 
-path_for_to_do_list = "Discord Bot\\LuigiBot\\to_do_list\\to_do_list.pkl"
+path_for_to_do_list = "to_do_list\\to_do_list.pkl"
 
 
 
