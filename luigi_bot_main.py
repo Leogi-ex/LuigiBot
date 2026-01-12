@@ -16,9 +16,10 @@ from discord import app_commands
 from discord import interactions
 
 # For Data 
+from matplotlib import lines
 import pandas as pd
 
-# Final Test
+from required_functions import extract_task_name
 
 
 
@@ -36,6 +37,8 @@ bot = commands.Bot(command_prefix="!L ", intents=discord.Intents.all())
 channel_id = config['Channel_ID']
 
 path_for_to_do_list = "to_do_list\\to_do_list.pkl"
+
+number_emojis = ["1️⃣","2️⃣","3️⃣","4️⃣","5️⃣","6️⃣","7️⃣","8️⃣","9️⃣"]
 
 
 
@@ -77,6 +80,104 @@ async def hello(ctx):
 
 
 #%%
+@bot.event
+async def on_reaction_add(reaction, user):
+    # Ignore reactions from the bot itself
+    if user.bot:
+        return
+    
+    luigi_channel = bot.get_channel(channel_id)
+    #"{reaction.message.content}"
+
+    emoji = str(reaction.emoji)
+
+    if str(reaction.emoji) in number_emojis:
+        embed = discord.Embed(title="Task", color=0x00FF00)
+        await luigi_channel.send(f'{user.name} reacted with {reaction.emoji} to the To Do List.')
+
+        idx = number_emojis.index(emoji)
+        to_do_list_df = pd.read_pickle(path_for_to_do_list)
+        filtered_df = to_do_list_df[to_do_list_df["STATUS"] != "Completed"]
+        task_df = filtered_df.sort_values(by=["PRIORITY", "DUE DATE"], ascending=[False, True]).iloc[[idx]]
+        
+        for _, row in task_df.astype(str).iterrows():
+            task_name = row["TASK"]
+            embed = discord.Embed(title=task_name, color=0x00FF00)
+            priority = row["PRIORITY"]
+            task_creation = row["TASK CREATION"]
+            catagory = row["CATAGORY"]
+            group = row["GROUP"]   
+            subgroup = row["SUB-GROUP"]
+            starttime = row["START TIME"]
+            estimated_time = row["ESTIMATED TIME"]
+            logged_hours = row["LOGGED HOURS"]
+            status = row["STATUS"]
+            if row["DUE DATE"] != "NaT":
+                due = row["DUE DATE"]
+            else:
+                due = "No due date"
+            link = row["RELEVANT LINK"]
+            link_md = f"[LINK]({link})" if link and link not in ("None", "nan") else "No link"
+            value = f"""Priority: {priority}\nDue: {due}\nSubgroup: {subgroup}\nStart Time: {starttime}\nEstimated Time: {estimated_time}\nLogged Hours: {logged_hours}\nTask Created: {task_creation}\n{link_md}\n"""
+            embed.add_field(name=status,value=value, inline=False)
+        
+        
+        msg = await luigi_channel.send(embed=embed)
+        await msg.add_reaction("✅")
+        await msg.add_reaction("▶️")
+        await msg.add_reaction("⏸️")
+
+
+    
+
+    # Check the emoji name
+    if emoji == "✅":
+        task_name = extract_task_name(reaction.message) 
+        to_do_list_df = pd.read_pickle(path_for_to_do_list)
+        try:
+                filtered_df = to_do_list_df[to_do_list_df["TASK"] == task_name]
+        except Exception as e: 
+            await luigi_channel.send(f"Something went wrong: {e}")
+
+        to_do_list_df.loc[to_do_list_df["TASK"] == task_name, "COMPLTETED TIME"] = pd.to_datetime(datetime.datetime.now().isoformat(' ', 'seconds'))
+        if filtered_df["LOGGED HOURS"][0] != None:
+            time_delta = filtered_df["COMPLETED TIME"] - filtered_df["START TIME"] + pd.Timedelta(hours = filtered_df["LOGGED HOURS"][0])
+        else:
+            time_delta = filtered_df["COMPLETED TIME"] - filtered_df["START TIME"]
+            to_do_list_df.loc[to_do_list_df["TASK"] == task_name, "LOGGED HOURS"] = time_delta
+
+        to_do_list_df.loc[to_do_list_df["TASK"] == task_name, "STATUS"] = "Completed"
+        to_do_list_df.to_pickle(path_for_to_do_list)
+        await luigi_channel.send(f"Updated '{task_name}' to 'Completed'")
+        await reaction.message.delete()
+
+
+
+
+    if emoji == "▶️":
+        task_name = extract_task_name(reaction.message) 
+        to_do_list_df = pd.read_pickle(path_for_to_do_list)
+        current_status = to_do_list_df.loc[to_do_list_df["TASK"] == task_name, "STATUS"].iloc[0]
+        if current_status == "Not Started":
+            to_do_list_df.loc[to_do_list_df["TASK"] == task_name, "START TIME"] = pd.to_datetime(datetime.datetime.now().isoformat(' ', 'seconds'))
+        to_do_list_df.loc[to_do_list_df["TASK"] == task_name, "STATUS"] = "In Progress"
+        to_do_list_df.to_pickle(path_for_to_do_list)
+        await luigi_channel.send(f"Updated '{task_name}' to 'In Progress'")
+        await reaction.message.delete()
+
+
+    if emoji == "⏸️":
+        task_name = extract_task_name(reaction.message) 
+        to_do_list_df = pd.read_pickle(path_for_to_do_list)
+        to_do_list_df.loc[to_do_list_df["TASK"] == task_name, "STATUS"] = "Hiatus"
+        to_do_list_df.to_pickle(path_for_to_do_list)
+        await luigi_channel.send(f"Updated '{task_name}' to 'Hiatus'")
+        await reaction.message.delete()
+        # You can add further actions here, like assigning a role or sending a message
+
+
+
+#%%
 # This Command Outputs the To-Do List
 
 @bot.hybrid_command(name = "to_do_list", description= "The current list of non-completed to-do list action items")
@@ -87,15 +188,36 @@ async def to_do_list(ctx):
 
     filtered_df = to_do_list_df[to_do_list_df["STATUS"] != "Completed"]
 
-    #embed = discord.Embed(title = "To Do List", description = "```\n" + to_do_list_df.loc[:, ["TASK", "PRIORITY", "STATUS", "DUE DATE", "RELEVANT LINK"]].to_markdown(index=False) + "\n```", color=0x00FF00)
 
-    message = "```\n" + filtered_df.loc[:, ["TASK", "PRIORITY", "STATUS", "DUE DATE"]].astype(str).to_markdown(index=False, tablefmt="grid") + "\n```"
+    # Build a single embed, each task as a field (renders well on mobile & desktop)
+    embed = discord.Embed(title="To Do List", color=0x00FF00)
+    count = 0
+    for _, row in filtered_df.loc[:, ["TASK", "PRIORITY", "STATUS", "DUE DATE", "RELEVANT LINK"]].sort_values(by=["PRIORITY", "DUE DATE"], ascending=[False, True]).astype(str).iterrows():
+        if count >= 9:
+            break  # Discord embed field limit
+        task_name = row["TASK"]
+        priority = row["PRIORITY"]
+        status = row["STATUS"]
+        if row["DUE DATE"] != "NaT":
+            due = row["DUE DATE"]
+        else:
+            due = "No due date"
+        link = row["RELEVANT LINK"]
+        link_md = f"[LINK]({link})" if link and link not in ("None", "nan") else "No link"
+        value = f"Priority: {priority}\nStatus: {status}\nDue: {due}\n{link_md}\n"
+        embed.add_field(name=f'{count+1}. {task_name}', value=value, inline=False)
 
-        
+        count += 1
+    
+    msg = await ctx.channel.send(embed=embed, delete_after=180)  # Delete after 3 minutes
 
-    #task = to_do_list_df['TASK'][0]
+    for i in range(min(count, len(number_emojis))):
+        try:
+            await msg.add_reaction(number_emojis[i])
+        except Exception:
+            pass
 
-    await ctx.send(message)
+
 
 
 #%%
@@ -167,61 +289,6 @@ async def create_task(ctx,
 
 #%%
 # This command updates the status of a task
-
-
-@bot.hybrid_command(name = "update_task", description = "This task to mark a task as completed or started")
-@app_commands.describe(
-    task_name = "The name of the task to start",
-    status = "Change in Status, choose one: Starting, Pending, Blocked, Hiatus, Completed"
-)
-async def update_task(ctx, task_name, status = "Starting" ):
-
-    to_do_list_df = pd.read_pickle(path_for_to_do_list)
-
-    try:
-        filtered_df = to_do_list_df[to_do_list_df["TASK"] == task_name]
-    except Exception as e: 
-        await ctx.send(f"Something went wrong: {e}")
-
-    current_status = filtered_df["STATUS"][0]
-
-
-    if current_status == "Not Started":
-        if status == "Starting":
-            to_do_list_df.loc[to_do_list_df["TASK"] == task_name, "START TIME"] = pd.to_datetime(datetime.datetime.now().isoformat(' ', 'seconds'))
-            to_do_list_df.loc[to_do_list_df["TASK"] == task_name, "STATUS"] = "In Progress"
-            to_do_list_df.to_pickle(path_for_to_do_list)
-            await ctx.send(f"Updated '{task_name}' to 'Starting'")
-
-        else:
-            await ctx.send("Task must be started before changing status")
-
-    else:
-        if status == "Starting":
-            await ctx.send(f"Task status was not set and {task_name} has already started")
-
-        elif status == "Completed":
-            to_do_list_df.loc[to_do_list_df["TASK"] == task_name, "COMPLTETED TIME"] = pd.to_datetime(datetime.datetime.now().isoformat(' ', 'seconds'))
-
-            if pd.Timedelta(hours = filtered_df["LOGGED HOURS"][0]) != None:
-                time_delta = filtered_df["COMPLETED TIME"] - filtered_df["START TIME"] + pd.Timedelta(hours = filtered_df["LOGGED HOURS"][0])
-            else:
-                time_delta = filtered_df["COMPLETED TIME"] - filtered_df["START TIME"]
-
-            to_do_list_df.loc[to_do_list_df["TASK"] == task_name, "LOGGED HOURS"] = time_delta
-            to_do_list_df.loc[to_do_list_df["TASK"] == task_name, "LOGGED HOURS"] = time_delta
-            
-            to_do_list_df.loc[to_do_list_df["TASK"] == task_name, "STATUS"] = "Completed"
-            to_do_list_df.to_pickle(path_for_to_do_list)
-
-            await ctx.send(f"Updated '{task_name}' to 'Completed'")
-        
-        elif status == "Pending" or "Blocked" or "Hiatus":
-            to_do_list_df.loc[to_do_list_df["TASK"] == task_name, "STATUS"] = status
-            to_do_list_df.to_pickle(path_for_to_do_list)
-            await ctx.send(f"Updated '{task_name}' to '{status}'")
-
-
 
     
 
