@@ -98,7 +98,8 @@ async def on_reaction_add(reaction, user):
 
     if str(reaction.emoji) in number_emojis:
         embed = discord.Embed(title="Task", color=0x00FF00)
-        await to_do_list_channel.send(f'{user.name} reacted with {reaction.emoji} to the To Do List.')
+        #await to_do_list_channel.send(f'{user.name} reacted with {reaction.emoji} to the To Do List.')
+        # Test line above
 
         idx = number_emojis.index(emoji)
         to_do_list_df = pd.read_pickle(path_for_to_do_list)
@@ -137,6 +138,8 @@ async def on_reaction_add(reaction, user):
 
     # Check the emoji name
     if emoji == "✅":
+
+        # Saving Task as Completed in the DataFrame
         task_name = extract_task_name(reaction.message) 
         to_do_list_df = pd.read_pickle(path_for_to_do_list)
         try:
@@ -153,7 +156,45 @@ async def on_reaction_add(reaction, user):
 
         to_do_list_df.loc[to_do_list_df["TASK"] == task_name, "STATUS"] = "Completed"
         to_do_list_df.to_pickle(path_for_to_do_list)
+
+
+        # Creating the Complete Message. 
+
+        to_do_list_df = pd.read_pickle(path_for_to_do_list)
+        try:
+                filtered_df = to_do_list_df[to_do_list_df["TASK"] == task_name]
+        except Exception as e: 
+            await to_do_list_channel.send(f"Something went wrong: {e}")
+
+        to_do_list_df = pd.read_pickle(path_for_to_do_list)
+        task_df = to_do_list_df[to_do_list_df["TASK"] == task_name]
+
+        for _, row in task_df.astype(str).iterrows():
+            task_name = row["TASK"]
+            embed = discord.Embed(title=task_name, color=0x00FF00)
+            priority = row["PRIORITY"]
+            task_creation = row["TASK CREATION"]
+            catagory = row["CATAGORY"]
+            group = row["GROUP"]   
+            subgroup = row["SUB-GROUP"]
+            starttime = row["START TIME"]
+            estimated_time = row["ESTIMATED TIME"]
+            logged_hours = row["LOGGED HOURS"]
+            status = row["STATUS"]
+            if row["DUE DATE"] != "NaT":
+                due = row["DUE DATE"]
+            else:
+                due = "No due date"
+            link = row["RELEVANT LINK"]
+            link_md = f"[LINK]({link})" if link and link not in ("None", "nan") else "No link"
+            value = f"""Priority: {priority}\nDue: {due}\nSubgroup: {subgroup}\nStart Time: {starttime}\nEstimated Time: {estimated_time}\nLogged Hours: {logged_hours}\nTask Created: {task_creation}\n{link_md}\n"""
+            embed.add_field(name=status,value=value, inline=False)
+
+
+        msg = await to_do_list_channel.send(embed=embed) 
+
         await to_do_list_channel.send(f"Updated '{task_name}' to 'Completed'")
+
         await reaction.message.delete()
 
 
@@ -299,7 +340,7 @@ async def create_task(ctx,
 
 #%%
 # RUN THE BOT
-
-
 bot.run(config['TOKEN'])
-# %%
+
+
+#%%
