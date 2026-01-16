@@ -18,6 +18,8 @@ from discord import interactions
 # For Data 
 from matplotlib import lines
 import pandas as pd
+import warnings
+warnings.simplefilter(action='ignore', category=FutureWarning)
 
 from required_functions import extract_task_name
 
@@ -271,17 +273,21 @@ async def to_do_list(ctx):
 
 # This command outputs the To-Do List Summary at 9:00am daily (Local time)
 
+# Define the specific time for the message (e.g., 9:45 AM UTC)
+# Use UTC or manage timezones carefully
+daily_message_time = datetime.time(hour=0, minute=45, second=0)
 
-@tasks.loop(hours=24)
+
+@tasks.loop(time = daily_message_time)
 async def send_daily_message():
     # Set your desired time (24-hour format)
     to_do_list_channel = bot.get_channel(config['Channel_ID_to_do'])
-    target_time = datetime.time(hour=9, minute=0)  # 9:00 AM
+    #target_time = datetime.time(hour=9, minute=0)  # 9:00 AM
     
-    now = datetime.datetime.now().time()
+    #now = datetime.datetime.now().time()
     
     # Check if current time matches target time (within the minute)
-    if now.hour == target_time.hour and now.minute == target_time.minute:
+    if to_do_list_channel:
 
         to_do_list_df = pd.read_pickle(path_for_to_do_list)
 
@@ -321,7 +327,7 @@ async def send_daily_message():
         relevant_link = "Any relevant links that pertain to the topic", 
         recurring = "True if this event is reoccuring [False is assumed]",
         recurring_interval = "How often does this occur in hours, 1 week = 168 hours",
-        due_date = "Is there a due date, format = 20130102",
+        due_date = "Is there a due date, format = 20130102, or use Today (td), Tomorrow (tmw), Week (wk)",
         priority = "Scale out of 10, 10 is emergency priority, base is 1",
         estimated_time = "Estimated time to complete in active work hours",
 )
@@ -336,6 +342,15 @@ async def create_task(ctx,
                       due_date = None,
                       priority = 1,
                       estimated_time = None):
+    
+    if due_date == "Today" or due_date == "today" or due_date == "td" or due_date == "TD":
+        due_date = datetime.datetime.now().date()
+
+    elif due_date == "Tomorrow" or due_date == "tomorrow" or due_date == "tmw" or due_date == "TMw":
+        due_date = datetime.datetime.now().date() + datetime.timedelta(days=1)
+
+    elif due_date == "Week" or due_date == "week" or due_date == "WK" or due_date == "wk":
+        due_date = datetime.datetime.now().date() + datetime.timedelta(weeks=1)
 
     to_list_pd = pd.DataFrame(
     {
