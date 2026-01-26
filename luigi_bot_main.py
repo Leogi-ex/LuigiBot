@@ -148,7 +148,7 @@ async def on_reaction_add(reaction, user):
         except Exception as e: 
             await to_do_list_channel.send(f"Something went wrong: {e}")
 
-        to_do_list_df.loc[to_do_list_df["TASK"] == task_name, "COMPLTETED TIME"][0] = pd.to_datetime(datetime.datetime.now().isoformat(' ', 'seconds'))
+        to_do_list_df.loc[to_do_list_df["TASK"] == task_name, "COMPLETED TIME"] = pd.to_datetime(datetime.datetime.now().isoformat(' ', 'seconds'))
         #print(to_do_list_df.loc[to_do_list_df["TASK"] == task_name]["LOGGED HOURS"][0])
         if pd.isna(to_do_list_df.loc[to_do_list_df["TASK"] == task_name]["LOGGED HOURS"][0]) == False:
             time_delta = filtered_df["COMPLETED TIME"] - filtered_df["START TIME"] + pd.Timedelta(hours = filtered_df["LOGGED HOURS"][0])
