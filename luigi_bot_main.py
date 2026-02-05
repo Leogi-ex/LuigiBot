@@ -143,21 +143,23 @@ async def on_reaction_add(reaction, user):
         # Saving Task as Completed in the DataFrame
         task_name = extract_task_name(reaction.message) 
         to_do_list_df = pd.read_pickle(path_for_to_do_list)
+        the_filter = (to_do_list_df["TASK"] == task_name) & (to_do_list_df["STATUS"] != "Completed")
+
         try:
-            filtered_df = to_do_list_df[to_do_list_df["TASK"] == task_name]
+            filtered_df = to_do_list_df[(to_do_list_df["TASK"] == task_name) & (to_do_list_df["STATUS"] != "Completed")]
         except Exception as e: 
             await to_do_list_channel.send(f"Something went wrong: {e}")
 
-        to_do_list_df.loc[to_do_list_df["TASK"] == task_name, "COMPLETED TIME"] = pd.to_datetime(datetime.datetime.now().isoformat(' ', 'seconds'))
+        to_do_list_df.loc[the_filter, "COMPLETED TIME"] = pd.to_datetime(datetime.datetime.now().isoformat(' ', 'seconds'))
         #print(to_do_list_df.loc[to_do_list_df["TASK"] == task_name]["LOGGED HOURS"][0])
-        if pd.isna(to_do_list_df.loc[to_do_list_df["TASK"] == task_name]["LOGGED HOURS"][0]) == False:
+        if pd.isna(to_do_list_df.loc[the_filter]["LOGGED HOURS"][0]) == False:
             time_delta = filtered_df["COMPLETED TIME"] - filtered_df["START TIME"] + pd.Timedelta(hours = filtered_df["LOGGED HOURS"][0])
-            to_do_list_df.loc[to_do_list_df["TASK"] == task_name, "LOGGED HOURS"][0] = time_delta
+            to_do_list_df.loc[the_filter, "LOGGED HOURS"][0] = time_delta
         else:
             time_delta = filtered_df["COMPLETED TIME"] - filtered_df["START TIME"]
-            to_do_list_df.loc[to_do_list_df["TASK"] == task_name, "LOGGED HOURS"][0] = time_delta
+            to_do_list_df.loc[the_filter, "LOGGED HOURS"][0] = time_delta
 
-        to_do_list_df.loc[to_do_list_df["TASK"] == task_name, "STATUS"] = "Completed"
+        to_do_list_df.loc[the_filter, "STATUS"] = "Completed"
         to_do_list_df.to_pickle(path_for_to_do_list)
 
 
@@ -171,7 +173,7 @@ async def on_reaction_add(reaction, user):
                 await to_do_list_channel.send(f"Something went wrong: {e}")
 
             to_do_list_df = pd.read_pickle(path_for_to_do_list)
-            task_df = to_do_list_df[to_do_list_df["TASK"] == task_name]
+            task_df = to_do_list_df[to_do_list_df["TASK"] == task_name].sort_values(by=["COMPLETED TIME"], ascending=[False])
 
             for _, row in task_df.astype(str).iterrows():
                 task_name = row["TASK"]
@@ -192,7 +194,7 @@ async def on_reaction_add(reaction, user):
                     due = "No due date"
                 link = row["RELEVANT LINK"]
                 link_md = f"[LINK]({link})" if link and link not in ("None", "nan") else "No link"
-                value = f"""Priority: {priority}\nDue: {due}\nSubgroup: {subgroup}\nStart Time: {starttime}\nEstimated Time: {estimated_time}\nLogged Hours: {logged_hours}\nTask Created: {task_creation}\nTask Completed: {task_completion}\n{link_md}\n"""
+                value = f"""Priority: {priority}\nDue: {due}\n Category: {catagory}\nGroup: {group}\nSubgroup: {subgroup}\nStart Time: {starttime}\nEstimated Time: {estimated_time}\nLogged Hours: {logged_hours}\nTask Created: {task_creation}\nTask Completed: {task_completion}\n{link_md}\n"""
                 embed.add_field(name=status,value=value, inline=False)
 
 
@@ -211,11 +213,13 @@ async def on_reaction_add(reaction, user):
     if emoji == "▶️":
         task_name = extract_task_name(reaction.message) 
         to_do_list_df = pd.read_pickle(path_for_to_do_list)
+        the_filter = (to_do_list_df["TASK"] == task_name) & (to_do_list_df["STATUS"] != "Completed")
+
         #current_status = to_do_list_df.loc[to_do_list_df["TASK"] == task_name, "STATUS"].iloc[0]
         #if current_status == "Not Started":
         #Not needed
-        to_do_list_df.loc[to_do_list_df["TASK"] == task_name, "START TIME"] = pd.to_datetime(datetime.datetime.now().isoformat(' ', 'seconds'))
-        to_do_list_df.loc[to_do_list_df["TASK"] == task_name, "STATUS"] = "In Progress"
+        to_do_list_df.loc[the_filter, "START TIME"] = pd.to_datetime(datetime.datetime.now().isoformat(' ', 'seconds'))
+        to_do_list_df.loc[the_filter, "STATUS"] = "In Progress"
         to_do_list_df.to_pickle(path_for_to_do_list)
         await to_do_list_channel.send(f"Updated '{task_name}' to 'In Progress'", delete_after=30)
         await reaction.message.delete()
@@ -224,18 +228,19 @@ async def on_reaction_add(reaction, user):
     if emoji == "⏸️":
         task_name = extract_task_name(reaction.message) 
         to_do_list_df = pd.read_pickle(path_for_to_do_list)
+        the_filter = (to_do_list_df["TASK"] == task_name) & (to_do_list_df["STATUS"] != "Completed")
 
 
 
-        if to_do_list_df.loc[to_do_list_df["TASK"] == task_name, "STATUS"][0] == 'In Progress':
+        if to_do_list_df.loc[the_filter, "STATUS"].iloc[0] == 'In Progress':
             # Then log hours
             now = datetime.datetime.now()
-            start = to_do_list_df.loc[to_do_list_df["TASK"] == task_name, "START TIME"][0] 
+            start = to_do_list_df.loc[the_filter, "START TIME"].iloc[0] 
             logged_hours = round((now - start).total_seconds() / 3600, 3) # Convert to hours
-            to_do_list_df.loc[to_do_list_df["TASK"] == task_name, "LOGGED HOURS"] = to_do_list_df.loc[to_do_list_df["TASK"] == task_name, "LOGGED HOURS"] + logged_hours
+            to_do_list_df.loc[the_filter, "LOGGED HOURS"] = to_do_list_df.loc[the_filter, "LOGGED HOURS"] + logged_hours
 
 
-        to_do_list_df.loc[to_do_list_df["TASK"] == task_name, "STATUS"] = "Hiatus"
+        to_do_list_df.loc[the_filter, "STATUS"] = "Hiatus"
         to_do_list_df.to_pickle(path_for_to_do_list)
         await to_do_list_channel.send(f"Updated '{task_name}' to 'Hiatus'", delete_after=30)
         await reaction.message.delete()
