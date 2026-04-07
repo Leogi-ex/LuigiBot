@@ -10,6 +10,7 @@ from discord.ext import commands, tasks
 import json
 import os
 import datetime
+import pytz
 #import io
 
 # For Slash Commands
@@ -41,6 +42,7 @@ channel_id = config['Channel_ID']
 user_id = config['User_ID']
 
 path_for_to_do_list = "to_do_list\\to_do_list.pkl"
+path_for_recurring_tasks = "to_do_list\\recurring_tasks.pkl"
 
 number_emojis = ["1️⃣","2️⃣","3️⃣","4️⃣","5️⃣","6️⃣","7️⃣","8️⃣","9️⃣"]
 
@@ -63,6 +65,7 @@ async def on_ready():
     except Exception as e:
         print(f"Error syncing commands: {e}")
     
+    send_daily_message.start()
 
     if luigi_channel:
         await luigi_channel.send("I'm Ready")
@@ -148,7 +151,7 @@ async def on_reaction_add(reaction, user):
         except Exception as e: 
             await to_do_list_channel.send(f"Something went wrong: {e}")
 
-        to_do_list_df.loc[to_do_list_df["TASK"] == task_name, "COMPLTETED TIME"][0] = pd.to_datetime(datetime.datetime.now().isoformat(' ', 'seconds'))
+        to_do_list_df.loc[to_do_list_df["TASK"] == task_name, "COMPLETED TIME"] = pd.to_datetime(datetime.datetime.now().isoformat(' ', 'seconds'))
         #print(to_do_list_df.loc[to_do_list_df["TASK"] == task_name]["LOGGED HOURS"][0])
         if pd.isna(to_do_list_df.loc[to_do_list_df["TASK"] == task_name]["LOGGED HOURS"][0]) == False:
             time_delta = filtered_df["COMPLETED TIME"] - filtered_df["START TIME"] + pd.Timedelta(hours = filtered_df["LOGGED HOURS"][0])
@@ -162,7 +165,6 @@ async def on_reaction_add(reaction, user):
 
 
         # Creating the Complete Message.
-        # 
         try: 
             to_do_list_df = pd.read_pickle(path_for_to_do_list)
             try:
@@ -287,53 +289,61 @@ async def to_do_list(ctx):
 
 #%% 
 
-# This command outputs the To-Do List Summary at 9:00am daily (Local time)
 
-# Define the specific time for the message (e.g., 9:45 AM UTC)
-# Use UTC or manage timezones carefully
-daily_message_time = datetime.time(hour=0, minute=45, second=0)
+@tasks.loop(minutes=1)
 
-
-@tasks.loop(time = daily_message_time)
+# This command outputs the To-Do List Summary at 12:45 AM EST daily
 async def send_daily_message():
-    # Set your desired time (24-hour format)
-    to_do_list_channel = bot.get_channel(config['Channel_ID_to_do'])
-    #target_time = datetime.time(hour=9, minute=0)  # 9:00 AM
+    est = pytz.timezone('US/Eastern')
+    now = datetime.datetime.now(est)
 
-        
-    now = datetime.datetime.now().time()
-    then = now.datetime.timedelta(days=1)
-    then.replace(hour=0, minute= 45)
-    wait_time = (then-now).total_seconds
 
-    await asyncio.sleep(wait_time)
+    if now.hour == 7 and now.minute == 45:
 
-    
-    # Check if current time matches target time (within the minute)
-    if to_do_list_channel:
-
+        recurring_pd = pd.read_pickle(path_for_recurring_tasks)
         to_do_list_df = pd.read_pickle(path_for_to_do_list)
+        filtered_df = to_do_list_df[to_do_list_df["STATUS"] == "Completed"]
 
-        filtered_df = to_do_list_df[to_do_list_df["STATUS"] != "Completed"]
-
-        # Build a single embed, each task as a field (renders well on mobile & desktop)
-        embed = discord.Embed(title="To Do List", color=0x00FF00)
-        count = 0
-        for _, row in filtered_df.loc[:, ["TASK", "PRIORITY", "STATUS", "DUE DATE", "RELEVANT LINK"]].sort_values(by=["PRIORITY", "DUE DATE"], ascending=[False, True]).astype(str).iterrows():
+        for _, row in recurring_pd.iterrows():
             task_name = row["TASK"]
-            priority = row["PRIORITY"]
-            status = row["STATUS"]
-            if row["DUE DATE"] != "NaT":
-                due = row["DUE DATE"]
-            else:
-                due = "No due date"
-            link = row["RELEVANT LINK"]
-            link_md = f"[LINK]({link})" if link and link not in ("None", "nan") else "No link"
-            value = f"Priority: {priority}\nStatus: {status}\nDue: {due}\n{link_md}\n"
-            embed.add_field(name=f'{count+1}. {task_name}', value=value, inline=False)
+            latest = filtered_df[filtered_df["TASK"] == task_name]["COMPLETED TIME"].max()
+            if datetime.datetime.now() - latest >= pd.Timedelta(days=row["RECURRING INTERVAL"]):
+                new_task = row.copy()
+                new_task["TASK CREATION"] = pd.to_datetime(datetime.datetime.now().isoformat(' ', 'seconds'))
+                new_task["STATUS"] = "Not Started"
+                new_task["START TIME"] = None
+                new_task["LOGGED HOURS"] = 0
+                new_task["COMPLETED"] = False
+                new_task["COMPLETED TIME"] = None
+                to_do_list_df = pd.concat([to_do_list_df, pd.DataFrame([new_task])])
+        to_do_list_df.to_pickle(path_for_to_do_list)
 
-    await to_do_list_channel.send(f"<@{user_id}>, Daily To-Do List Summary:")    
-    await to_do_list_channel.send(embed=embed)
+
+    if now.hour == 8 and now.minute == 0:
+ 
+        to_do_list_channel = bot.get_channel(channel_id)
+
+        if to_do_list_channel:
+            to_do_list_df = pd.read_pickle(path_for_to_do_list)
+
+            filtered_df = to_do_list_df[to_do_list_df["STATUS"] != "Completed"]
+
+            embed = discord.Embed(title="To Do List", color=0x00FF00)
+            count = 0
+            for _, row in filtered_df.loc[:, ["TASK", "PRIORITY", "STATUS", "DUE DATE", "RELEVANT LINK"]].sort_values(by=["PRIORITY", "DUE DATE"], ascending=[False, True]).astype(str).iterrows():
+                task_name = row["TASK"]
+                priority = row["PRIORITY"]
+                status = row["STATUS"]
+                if row["DUE DATE"] != "NaT":
+                    due = row["DUE DATE"]
+                else:
+                    due = "No due date"
+                link = row["RELEVANT LINK"]
+                link_md = f"[LINK]({link})" if link and link not in ("None", "nan") else "No link"
+                value = f"Priority: {priority}\nStatus: {status}\nDue: {due}\n{link_md}\n"
+                embed.add_field(name=f'{count+1}. {task_name}', value=value, inline=False)
+            await to_do_list_channel.send(f"<@{user_id}>, Daily To-Do List Summary:")
+            await to_do_list_channel.send(embed=embed)
 
 
 
@@ -349,7 +359,7 @@ async def send_daily_message():
         subgroup = "The sub-group that this task falls under, i.e. Complete Dark Souls",
         relevant_link = "Any relevant links that pertain to the topic", 
         recurring = "True if this event is reoccuring [False is assumed]",
-        recurring_interval = "How often does this occur in hours, 1 week = 168 hours",
+        recurring_interval = "How often does this occur in days? Only needed if recurring is True",
         due_date = "Is there a due date, format = 20130102, or use Today (td), Tomorrow (tmw), Week (wk)",
         priority = "Scale out of 10, 10 is emergency priority, base is 1",
         estimated_time = "Estimated time to complete in active work hours",
@@ -365,6 +375,8 @@ async def create_task(ctx,
                       due_date = None,
                       priority = 1,
                       estimated_time = None):
+    
+
     
     if due_date == "Today" or due_date == "today" or due_date == "td" or due_date == "TD":
         due_date = datetime.datetime.now().date()
@@ -402,6 +414,32 @@ async def create_task(ctx,
         "LOGGED HOURS": 0,
         "COMPLETED": False,
         "COMPLETED TIME": None})
+    
+    if recurring and not recurring_interval:
+        await ctx.send("Please provide a recurring interval in days for this recurring task.", delete_after=30)
+        return
+    
+    if recurring_interval and not recurring:
+        await ctx.send("Recurring interval provided but recurring is not set to True. Please set recurring to True if you want to use recurring interval.", delete_after=30)
+        return
+    
+    if recurring and recurring_interval:
+        try:
+            recurring_interval = int(recurring_interval)
+        except ValueError:
+            await ctx.send("Recurring interval must be an integer representing days.", delete_after=30)
+            return
+        
+        try:
+            recurring_pd = pd.read_pickle(path_for_recurring_tasks)
+        except FileNotFoundError:
+            recurring_pd = pd.DataFrame()
+        combine_recurring = pd.concat([recurring_pd, to_list_pd])
+        try: 
+            combine_recurring.to_pickle(path_for_recurring_tasks)
+            await ctx.send("Added to recurring tasks")
+        except Exception as e:
+            await ctx.send(f"Something went wrong: {e}")
     
     to_do_list_df = pd.read_pickle(path_for_to_do_list)
 
