@@ -350,6 +350,7 @@ async def send_daily_message():
                 link_md = f"[LINK]({link})" if link and link not in ("None", "nan") else "No link"
                 value = f"Priority: {priority}\nStatus: {status}\nDue: {due}\n{link_md}\n"
                 embed.add_field(name=f'{count+1}. {task_name}', value=value, inline=False)
+                count += 1
             await to_do_list_channel.send(f"<@{user_id}>, Daily To-Do List Summary:")
             await to_do_list_channel.send(embed=embed)
 
