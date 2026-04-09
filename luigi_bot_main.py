@@ -328,8 +328,11 @@ async def send_daily_message():
 
 
     if now.hour == 8 and now.minute == 0:
- 
-        to_do_list_channel = bot.get_channel(channel_id)
+        
+        try: 
+            to_do_list_channel = bot.get_channel(config['Channel_ID_to_do'])
+        except:
+            to_do_list_channel = bot.get_channel(channel_id)
 
         if to_do_list_channel:
             to_do_list_df = pd.read_pickle(path_for_to_do_list)
