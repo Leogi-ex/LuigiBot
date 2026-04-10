@@ -315,7 +315,7 @@ async def send_daily_message():
             task_name = row["TASK"]
             if task_name not in active_df["TASK"].values:
                 latest = completed_df[completed_df["TASK"] == task_name]["COMPLETED TIME"].max()
-                if datetime.datetime.now() - latest >= pd.Timedelta(days=row["RECURRING INTERVAL"]):
+                if datetime.datetime.now() - latest >= pd.Timedelta(days=row[row["RECURRING"] == True]["RECURRING INTERVAL"]):
                     new_task = row.copy()
                     new_task["TASK CREATION"] = pd.to_datetime(datetime.datetime.now().isoformat(' ', 'seconds'))
                     new_task["STATUS"] = "Not Started"
