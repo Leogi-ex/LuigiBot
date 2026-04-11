@@ -91,6 +91,11 @@ async def on_reaction_add(reaction, user):
     if user.bot:
         return
     
+    # Only process reactions in the configured to-do channel
+    allowed_channel_id = config.get("Channel_ID_to_do", channel_id)
+    if reaction.message.channel.id != allowed_channel_id:
+        return
+    
     luigi_channel = bot.get_channel(channel_id)
     #"{reaction.message.content}"
 
