@@ -140,6 +140,8 @@ class TaskActionView(discord.ui.View):
                 embed.add_field(name=status, value=value, inline=False)
 
             await interaction.response.edit_message(embed=embed, view=None)
+            msg = await interaction.original_response()
+            await msg.delete(delay=60)
 
         except Exception as e:
             await interaction.response.send_message(f"Error completing task '{task_name}': {e}", ephemeral=True)
@@ -313,6 +315,40 @@ async def send_daily_message():
                 embed.add_field(name=f'{count+1}. {task_name}', value=value, inline=False)
                 count += 1
             await to_do_list_channel.send(f"<@{user_id}>, Daily To-Do List Summary:")
+            await to_do_list_channel.send(embed=embed, view=TaskSelectView(count))
+
+
+    if now.hour == 23 and now.minute == 0:
+        
+        try: 
+            to_do_list_channel = bot.get_channel(config['Channel_ID_to_do'])
+        except:
+            to_do_list_channel = bot.get_channel(channel_id)
+
+        if to_do_list_channel:
+            to_do_list_df = pd.read_pickle(path_for_to_do_list)
+
+            filtered_df = to_do_list_df[
+                (to_do_list_df["STATUS"] == "Completed")
+                & (to_do_list_df["COMPLETED TIME"] >= pd.Timestamp.now() - pd.Timedelta(hours=24))
+            ]
+
+            embed = discord.Embed(title="To Do List", color=0x00FF00)
+            count = 0
+            for _, row in filtered_df.loc[:, ["TASK", "PRIORITY", "STATUS", "DUE DATE", "RELEVANT LINK"]].sort_values(by=["PRIORITY", "DUE DATE"], ascending=[False, True]).astype(str).iterrows():
+                task_name = row["TASK"]
+                priority = row["PRIORITY"]
+                status = row["STATUS"]
+                if row["DUE DATE"] != "NaT":
+                    due = row["DUE DATE"]
+                else:
+                    due = "No due date"
+                link = row["RELEVANT LINK"]
+                link_md = f"[LINK]({link})" if link and link not in ("None", "nan") else "No link"
+                value = f"Priority: {priority}\nStatus: {status}\nDue: {due}\n{link_md}\n"
+                embed.add_field(name=f'{count+1}. {task_name}', value=value, inline=False)
+                count += 1
+            await to_do_list_channel.send(f"<@{user_id}>, Task Completed Today: {datetime.datetime.now().strftime('%m/%d/%Y')}")
             await to_do_list_channel.send(embed=embed, view=TaskSelectView(count))
 
 
