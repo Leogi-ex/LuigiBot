@@ -315,7 +315,7 @@ async def send_daily_message():
                 embed.add_field(name=f'{count+1}. {task_name}', value=value, inline=False)
                 count += 1
             await to_do_list_channel.send(f"<@{user_id}>, Daily To-Do List Summary:")
-            await to_do_list_channel.send(embed=embed, view=TaskSelectView(count))
+            await to_do_list_channel.send(embed=embed)
 
 
     if now.hour == 23 and now.minute == 0:
@@ -333,7 +333,7 @@ async def send_daily_message():
                 & (to_do_list_df["COMPLETED TIME"] >= pd.Timestamp.now() - pd.Timedelta(hours=24))
             ]
 
-            embed = discord.Embed(title="To Do List", color=0x00FF00)
+            embed = discord.Embed(title="Tasks Completed Today", color=0x00FF00)
             count = 0
             for _, row in filtered_df.loc[:, ["TASK", "PRIORITY", "STATUS", "DUE DATE", "RELEVANT LINK"]].sort_values(by=["PRIORITY", "DUE DATE"], ascending=[False, True]).astype(str).iterrows():
                 task_name = row["TASK"]
@@ -349,7 +349,7 @@ async def send_daily_message():
                 embed.add_field(name=f'{count+1}. {task_name}', value=value, inline=False)
                 count += 1
             await to_do_list_channel.send(f"<@{user_id}>, Task Completed Today: {datetime.datetime.now().strftime('%m/%d/%Y')}")
-            await to_do_list_channel.send(embed=embed, view=TaskSelectView(count))
+            await to_do_list_channel.send(embed=embed)
 
 
 
